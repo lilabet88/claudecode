@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Au Pair Schedule</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f0f2f5;
+    color: #1a1a2e;
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px; flex-wrap: wrap; gap: 10px;
+  }
+  header h1 { font-size: 1.4rem; font-weight: 700; }
+  .week-nav { display: flex; align-items: center; gap: 7px; }
+  .week-nav button {
+    background: #fff; border: 1px solid #ddd; border-radius: 8px;
+    padding: 6px 13px; cursor: pointer; font-size: 0.84rem; transition: background 0.12s;
+  }
+  .week-nav button:hover { background: #e8eaf6; }
+  #week-label { font-size: 0.9rem; font-weight: 600; min-width: 210px; text-align: center; }
+  .header-actions { display: flex; gap: 8px; }
+  .btn {
+    padding: 7px 14px; border-radius: 8px; border: none;
+    cursor: pointer; font-size: 0.82rem; font-weight: 600; transition: opacity 0.12s;
+  }
+  .btn:hover { opacity: 0.82; }
+  .btn-success { background: #43a047; color: #fff; }
+  .btn-danger  { background: #ef5350; color: #fff; }
+
+  /* ── Label toolbar ── */
+  .label-toolbar {
+    background: #fff; border-radius: 12px; padding: 10px 16px;
+    margin-bottom: 12px; display: flex; align-items: center; gap: 10px;
+    flex-wrap: wrap; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  .toolbar-hint { font-size: 0.76rem; color: #999; white-space: nowrap; }
+  .label-chips { display: flex; gap: 7px; flex-wrap: wrap; }
+  .lchip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 13px; border-radius: 20px; border: 2px solid transparent;
+    cursor: pointer; font-size: 0.78rem; font-weight: 600; color: #fff;
+    transition: transform 0.1s;
+  }
+  .lchip:hover { transform: scale(1.04); }
+  .lchip.active { border-color: #1a1a2e; box-shadow: 0 0 0 3px rgba(0,0,0,0.10); }
+  .lchip .dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.45); }
+
+  /* ── Summary bar ── */
+  .summary-bar {
+    background: #fff; border-radius: 12px; padding: 12px 18px;
+    margin-bottom: 12px; display: flex; gap: 18px; flex-wrap: wrap;
+    align-items: center; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  .total-week { font-size: 1rem; font-weight: 700; color: #5c6bc0; white-space: nowrap; }
+  .day-totals { display: flex; gap: 10px; flex-wrap: wrap; }
+  .day-total-chip {
+    display: flex; flex-direction: column; align-items: center;
+    font-size: 0.73rem; color: #666;
+  }
+  .day-total-chip .hrs { font-weight: 700; font-size: 0.88rem; color: #1a1a2e; }
+
+  /* ── Grid ── */
+  .grid-wrapper {
+    overflow-x: auto; background: #fff;
+    border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  table {
+    border-collapse: collapse; width: 100%;
+    min-width: 640px; user-select: none; table-layout: fixed;
+  }
+  thead th {
+    padding: 10px 4px; font-size: 0.79rem; font-weight: 700; text-align: center;
+    background: #f7f8fc; border-bottom: 2px solid #e0e0e0;
+    position: sticky; top: 0; z-index: 2;
+  }
+  thead th.time-col { width: 58px; color: #bbb; font-weight: 400; }
+  thead th.day-col .day-name { display: block; }
+  thead th.day-col .day-date { display: block; font-weight: 400; color: #999; font-size: 0.7rem; }
+  thead th.today-col .day-name { color: #5c6bc0; }
+
+  td.time-label {
+    padding: 0 7px; font-size: 0.7rem; color: #c0c0c0;
+    text-align: right; vertical-align: top; padding-top: 2px;
+    white-space: nowrap; border-right: 1px solid #ebebeb; width: 58px;
+  }
+
+  /* empty slot */
+  td.slot-empty {
+    border: 1px solid #f2f2f2; height: 22px;
+    cursor: crosshair; transition: background 0.07s;
+  }
+  td.slot-empty:hover    { background: #eef0fb; }
+  td.slot-empty.drag-preview { background: var(--drag-color, #c5cae9) !important; opacity: 0.7; }
+  tr.hour-start td.slot-empty { border-top: 1px solid #e4e4e4; }
+  tr.half-hour  td.slot-empty { border-top: 1px dashed #f0f0f0; }
+
+  /* booked merged block */
+  td.slot-booked {
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 5px; cursor: pointer;
+    vertical-align: middle; text-align: center;
+    padding: 3px 2px; position: relative;
+    transition: filter 0.1s;
+  }
+  td.slot-booked:hover { filter: brightness(0.88); }
+  td.slot-booked.drag-clear { opacity: 0.35 !important; }
+
+  .slot-inner {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 1px; pointer-events: none; overflow: hidden;
+  }
+  .slot-name  { font-size: 0.71rem; font-weight: 700; color: rgba(255,255,255,0.97); white-space: nowrap; }
+  .slot-range { font-size: 0.61rem; font-weight: 500; color: rgba(255,255,255,0.72); white-space: nowrap; }
+  .slot-desc-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: rgba(255,255,255,0.65);
+    position: absolute; top: 3px; right: 4px; pointer-events: none;
+  }
+
+  /* ── Popover ── */
+  #slot-popover {
+    position: fixed; z-index: 1000;
+    background: #fff; border-radius: 14px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08);
+    padding: 16px; width: 278px; display: none;
+    animation: popIn 0.13s ease;
+  }
+  @keyframes popIn {
+    from { transform: scale(0.88); opacity: 0; }
+    to   { transform: scale(1);    opacity: 1; }
+  }
+  #slot-popover.visible { display: block; }
+
+  .popover-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px;
+  }
+  .pop-title { font-size: 0.84rem; font-weight: 700; color: #222; }
+  .pop-close {
+    cursor: pointer; font-size: 1.1rem; color: #bbb;
+    padding: 2px 6px; border-radius: 5px; line-height: 1;
+    border: none; background: none;
+  }
+  .pop-close:hover { background: #f0f0f0; color: #555; }
+
+  .pop-section-label {
+    font-size: 0.69rem; color: #999; margin-bottom: 6px;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .pop-label-row { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 13px; }
+  .pop-lchip {
+    padding: 5px 11px; border-radius: 16px; border: 2px solid transparent;
+    cursor: pointer; font-size: 0.73rem; font-weight: 600; color: #fff;
+    transition: transform 0.1s;
+  }
+  .pop-lchip:hover  { transform: scale(1.05); }
+  .pop-lchip.selected { border-color: #1a1a2e; }
+  .pop-lchip.none-chip { color: #555; background: #e8e8e8 !important; }
+  .pop-lchip.none-chip.selected { border-color: #888; }
+
+  #pop-description {
+    width: 100%; border: 1px solid #e0e0e0; border-radius: 8px;
+    padding: 8px; font-size: 0.81rem; font-family: inherit;
+    resize: none; height: 66px; color: #333; margin-bottom: 12px;
+    transition: border-color 0.15s;
+  }
+  #pop-description:focus { outline: none; border-color: #5c6bc0; }
+
+  .pop-actions { display: flex; gap: 7px; }
+  .pop-actions button {
+    flex: 1; padding: 8px; border-radius: 8px; border: none;
+    cursor: pointer; font-size: 0.81rem; font-weight: 600;
+    transition: opacity 0.12s;
+  }
+  .pop-actions button:hover { opacity: 0.82; }
+  #pop-save   { background: #5c6bc0; color: #fff; }
+  #pop-remove { background: #f0f0f0; color: #555; }
+
+  /* ── Legend ── */
+  .legend { margin-top: 10px; font-size: 0.74rem; color: #999; text-align: center; }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; margin: 0 6px; }
+  .legend-box { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+  /* ── Export ── */
+  .export-section {
+    margin-top: 12px; background: #fff; border-radius: 12px;
+    padding: 14px 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  .export-section h3 { font-size: 0.85rem; margin-bottom: 8px; color: #777; }
+  textarea#summary-text {
+    width: 100%; height: 110px; border: 1px solid #e4e4e4; border-radius: 8px;
+    padding: 10px; font-family: monospace; font-size: 0.8rem;
+    resize: vertical; background: #fafafa; color: #333;
+  }
+
+  /* Overlay — behind popover, captures outside-clicks */
+  #overlay { display: none; position: fixed; inset: 0; z-index: 999; }
+  #overlay.visible { display: block; }
+
+  @media (max-width: 600px) {
+    body { padding: 10px; }
+    header h1 { font-size: 1.15rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Au Pair Schedule</h1>
+  <div class="week-nav">
+    <button id="prev-week">&#8592;</button>
+    <span id="week-label"></span>
+    <button id="next-week">&#8594;</button>
+    <button id="today-btn">Today</button>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-success" id="copy-btn">Copy Summary</button>
+    <button class="btn btn-danger"  id="clear-btn">Clear Week</button>
+  </div>
+</header>
+
+<div class="label-toolbar">
+  <span class="toolbar-hint">Active label:</span>
+  <div class="label-chips" id="label-chips"></div>
+  <span class="toolbar-hint" style="margin-left:6px">· Drag empty cells to fill · Click a block to edit/remove</span>
+</div>
+
+<div class="summary-bar">
+  <div class="total-week" id="total-week">Week total: 0h 0m</div>
+  <div class="day-totals" id="day-totals"></div>
+</div>
+
+<div class="grid-wrapper">
+  <table id="schedule-table">
+    <thead id="table-head"></thead>
+    <tbody id="table-body"></tbody>
+  </table>
+</div>
+
+<div class="legend" id="legend"></div>
+
+<div class="export-section">
+  <h3>Week Summary</h3>
+  <textarea id="summary-text" readonly></textarea>
+</div>
+
+<!-- overlay catches clicks outside the popover -->
+<div id="overlay"></div>
+
+<div id="slot-popover">
+  <div class="popover-header">
+    <span class="pop-title" id="pop-title">Slot</span>
+    <button class="pop-close" id="pop-close" type="button">&#x2715;</button>
+  </div>
+  <div class="pop-section-label">Label</div>
+  <div class="pop-label-row" id="pop-label-row"></div>
+  <div class="pop-section-label">Notes</div>
+  <textarea id="pop-description" placeholder="e.g. pick up from school, bath time…"></textarea>
+  <div class="pop-actions">
+    <button id="pop-save"   type="button">Save</button>
+    <button id="pop-remove" type="button">Remove Block</button>
+  </div>
+</div>
+
+<script>
+// ─── Config ────────────────────────────────────────────────
+const DAYS          = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const START_HOUR    = 7;
+const END_HOUR      = 23;   // last slot ends at 11 pm
+const SLOTS_PER_DAY = (END_HOUR - START_HOUR) * 2;   // 32 slots
+const STORAGE_KEY   = 'au-pair-schedule-v2';
+
+const LABELS = [
+  { id: 'school-run',  name: 'School Run',  color: '#e67e22' },
+  { id: 'babysitting', name: 'Babysitting', color: '#5c6bc0' },
+  { id: 'bedtime',     name: 'Bedtime',     color: '#7c3aed' },
+];
+const LABEL_MAP = Object.fromEntries(LABELS.map(l => [l.id, l]));
+
+// ─── App state ─────────────────────────────────────────────
+let currentWeekStart = getWeekStart(new Date());
+// data[dateKey][slotIdx] = { label: string|null, description: string }
+let data = {};
+let activeDragLabel = LABELS[0].id;
+
+// Drag state
+let isDragging  = false;
+let dragMoved   = false;
+let dragMode    = null;       // 'book' | 'clear'
+let dragLabel   = null;       // label used for current drag (may differ from toolbar)
+let dragOrigin  = null;       // { day, slot }
+let lastDragKey = null;
+
+// Popover state
+let popTarget = null;         // { dk, day, start, end }
+
+// ─── Helpers ───────────────────────────────────────────────
+function getWeekStart(d) {
+  const r = new Date(d); r.setHours(0,0,0,0); r.setDate(r.getDate()-r.getDay()); return r;
+}
+function dateKey(d)  { return d.toISOString().slice(0,10); }
+function addDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+function weekDates() { return Array.from({length:7},(_,i)=>addDays(currentWeekStart,i)); }
+
+function slotTime(idx) {
+  const t  = START_HOUR*60 + idx*30;
+  const h  = Math.floor(t/60), m = t%60;
+  const ap = h < 12 ? 'am' : 'pm';
+  const h12= h===0?12 : h>12?h-12:h;
+  return `${h12}:${m.toString().padStart(2,'0')}${ap}`;
+}
+
+function getDayData(dk)    { if (!data[dk]) data[dk]={}; return data[dk]; }
+function getSlotData(dk,s) { return getDayData(dk)[s]||null; }
+function setSlot(dk,s,label,desc){ getDayData(dk)[s]={label:label||null,description:desc||''}; }
+function clearSlot(dk,s)   { if(data[dk]) delete data[dk][s]; }
+function isBooked(dk,s)    { return !!getSlotData(dk,s); }
+function labelColor(id)    { return id&&LABEL_MAP[id] ? LABEL_MAP[id].color : '#64748b'; }
+function labelName(id)     { return id&&LABEL_MAP[id] ? LABEL_MAP[id].name  : 'Booked'; }
+
+// ─── Group computation ─────────────────────────────────────
+// Consecutive booked slots with the SAME label → one group
+function computeGroups(dk) {
+  const out = [];
+  let s = 0;
+  while (s < SLOTS_PER_DAY) {
+    const sd = getSlotData(dk, s);
+    if (!sd) { out.push({start:s,end:s+1,booked:false}); s++; continue; }
+    let end = s+1;
+    while (end < SLOTS_PER_DAY) {
+      const nx = getSlotData(dk, end);
+      if (nx && nx.label === sd.label) end++; else break;
+    }
+    out.push({start:s, end, booked:true, label:sd.label, description:sd.description});
+    s = end;
+  }
+  return out;
+}
+
+// ─── Toolbar ───────────────────────────────────────────────
+function renderToolbar() {
+  const el = document.getElementById('label-chips');
+  el.innerHTML = LABELS.map(l =>
+    `<div class="lchip${activeDragLabel===l.id?' active':''}"
+          style="background:${l.color}" data-lid="${l.id}">
+       <span class="dot"></span>${l.name}
+     </div>`).join('');
+  el.querySelectorAll('.lchip').forEach(c => c.addEventListener('click', ()=>{
+    activeDragLabel = c.dataset.lid; renderToolbar();
+  }));
+}
+
+// ─── Render grid ───────────────────────────────────────────
+function renderHead() {
+  const today = dateKey(new Date());
+  const ths = weekDates().map((d,i)=>{
+    const isToday = dateKey(d)===today;
+    return `<th class="day-col${isToday?' today-col':''}">
+      <span class="day-name">${DAYS[i]}</span>
+      <span class="day-date">${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
+    </th>`;
+  }).join('');
+  document.getElementById('table-head').innerHTML=`<tr><th class="time-col"></th>${ths}</tr>`;
+}
+
+function renderBody() {
+  const dates = weekDates();
+  const keys  = dates.map(dateKey);
+
+  // Build per-day, per-slot lookup: render=true means "emit a <td>", render=false means covered
+  const lookup = keys.map(dk => {
+    const map = {};
+    computeGroups(dk).forEach(g => {
+      map[g.start] = { render:true, group:g };
+      for (let s=g.start+1; s<g.end; s++) map[s]={ render:false };
+    });
+    return map;
+  });
+
+  let rows = '';
+  for (let s=0; s<SLOTS_PER_DAY; s++) {
+    const isHalf   = s%2===1;
+    const rowClass = isHalf ? 'half-hour' : 'hour-start';
+    const timeLabel= isHalf ? '' : slotTime(s);
+    let cells = `<td class="time-label">${timeLabel}</td>`;
+
+    for (let d=0; d<7; d++) {
+      const info = lookup[d][s];
+      if (!info || !info.render) continue;   // covered by rowspan above
+
+      const g   = info.group;
+      const span= g.end - g.start;
+      const rs  = span>1 ? ` rowspan="${span}"` : '';
+
+      if (!g.booked) {
+        cells += `<td class="slot-empty"${rs}
+                      data-day="${d}" data-slot="${s}" data-span="1"></td>`;
+      } else {
+        const col   = labelColor(g.label);
+        const name  = labelName(g.label);
+        const range = span>=2 ? `${slotTime(g.start)}–${slotTime(g.end)}` : '';
+        const dot   = g.description ? `<span class="slot-desc-dot"></span>` : '';
+        cells += `<td class="slot-booked"${rs}
+                      style="background:${col}"
+                      data-day="${d}" data-slot="${g.start}" data-span="${span}" data-label="${g.label||''}">
+          <div class="slot-inner">
+            <span class="slot-name">${name}</span>
+            ${range ? `<span class="slot-range">${range}</span>` : ''}
+          </div>${dot}
+        </td>`;
+      }
+    }
+    rows += `<tr class="${rowClass}">${cells}</tr>`;
+  }
+  document.getElementById('table-body').innerHTML = rows;
+}
+
+// ─── Summary ───────────────────────────────────────────────
+function renderSummary() {
+  const dates = weekDates();
+  const keys  = dates.map(dateKey);
+  let weekSlots = 0;
+
+  // day chips
+  const chips = DAYS.map((day,i)=>{
+    const n = Object.keys(getDayData(keys[i])).length;
+    weekSlots += n;
+    const h=Math.floor(n*30/60), m=(n*30)%60;
+    const lbl = h>0?`${h}h${m>0?` ${m}m`:''}`:(m>0?`${m}m`:'—');
+    return `<div class="day-total-chip"><span>${day}</span><span class="hrs">${lbl}</span></div>`;
+  }).join('');
+
+  const wh=Math.floor(weekSlots*30/60), wm=(weekSlots*30)%60;
+  document.getElementById('total-week').textContent=`Week total: ${wh}h ${wm}m`;
+  document.getElementById('day-totals').innerHTML=chips;
+
+  // ── text summary: totals only ──
+  const lt={};
+  keys.forEach(dk=>Object.values(getDayData(dk)).forEach(sd=>{
+    const lb=sd.label||'other'; lt[lb]=(lt[lb]||0)+1;
+  }));
+
+  const lines=[
+    `Au Pair Schedule — Week of ${currentWeekStart.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}`,
+    '',
+    `Total hours: ${wh}h ${wm}m`,
+    ''
+  ];
+  if (Object.keys(lt).length) {
+    lines.push('By category:');
+    Object.entries(lt).forEach(([lb,cnt])=>{
+      const h2=Math.floor(cnt*30/60), m2=(cnt*30)%60;
+      lines.push(`  ${lb==='other'?'Other':labelName(lb)}: ${h2}h ${m2}m`);
+    });
+  } else {
+    lines.push('No slots booked yet.');
+  }
+  document.getElementById('summary-text').value=lines.join('\n');
+}
+
+function renderLegend() {
+  document.getElementById('legend').innerHTML =
+    LABELS.map(l=>`<span><span class="legend-box" style="background:${l.color}"></span>${l.name}</span>`).join('')
+    +`<span><span class="legend-box" style="background:#fff;border:1px solid #ccc"></span>Empty</span>`
+    +`<span style="color:#bbb">· White dot = has notes</span>`;
+}
+
+function render() {
+  renderToolbar(); renderHead(); renderBody();
+  renderSummary(); renderLegend(); saveToStorage();
+}
+
+// ─── Drag & click — set up ONCE on static table element ────
+// (Never re-attached, so no listener accumulation)
+(function setupInteraction() {
+  const table = document.getElementById('schedule-table');
+
+  // ── mouse ──
+  table.addEventListener('mousedown', e => {
+    const td = e.target.closest('td.slot-empty, td.slot-booked');
+    if (!td) return;
+    e.preventDefault();
+    isDragging  = true;
+    dragMoved   = false;
+    lastDragKey = null;
+    dragOrigin  = { day:+td.dataset.day, slot:+td.dataset.slot };
+    // Always book mode — dragging from a booked cell extends it using its own label
+    dragMode  = 'book';
+    dragLabel = td.classList.contains('slot-booked')
+      ? (td.dataset.label || activeDragLabel)   // use the block's existing label
+      : activeDragLabel;
+    // Don't touch data yet — wait to see if this is a click or a drag
+  });
+
+  table.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    const td = e.target.closest('td.slot-empty, td.slot-booked');
+    if (!td) return;
+    const key = `${td.dataset.day}-${td.dataset.slot}`;
+    if (key === lastDragKey) return;
+    const movedToNew = dragOrigin &&
+      (+td.dataset.day !== dragOrigin.day || +td.dataset.slot !== dragOrigin.slot);
+    if (movedToNew && !dragMoved) {
+      // First real move — retroactively apply to the origin cell too
+      dragMoved = true;
+      const originTd = document.querySelector(
+        `td[data-day="${dragOrigin.day}"][data-slot="${dragOrigin.slot}"]`);
+      if (originTd) applyDragCell(originTd);
+    }
+    if (dragMoved) { lastDragKey = key; applyDragCell(td); }
+  });
+
+  document.addEventListener('mouseup', e => {
+    if (!isDragging) return;
+    isDragging = false;
+    if (!dragMoved && dragOrigin) {
+      // Was a click — open popover
+      const td = document.querySelector(
+        `td[data-day="${dragOrigin.day}"][data-slot="${dragOrigin.slot}"]`);
+      openPopover(dragOrigin.day, dragOrigin.slot, e, td);
+    } else {
+      // Drag finished — full re-render to show merged blocks
+      renderBody(); renderSummary(); saveToStorage();
+    }
+    dragOrigin = null; dragMoved = false; dragMode = null; dragLabel = null; lastDragKey = null;
+  });
+
+  // ── touch ──
+  table.addEventListener('touchstart', e => {
+    const td = e.target.closest('td.slot-empty, td.slot-booked');
+    if (!td) return;
+    isDragging = true; dragMoved = false; lastDragKey = null;
+    dragOrigin = { day:+td.dataset.day, slot:+td.dataset.slot };
+    dragMode   = 'book';
+    dragLabel  = td.classList.contains('slot-booked')
+      ? (td.dataset.label || activeDragLabel) : activeDragLabel;
+    // Don't apply yet
+  }, {passive:true});
+
+  table.addEventListener('touchmove', e => {
+    if (!isDragging) return;
+    const t  = e.touches[0];
+    const el = document.elementFromPoint(t.clientX, t.clientY);
+    const td = el && el.closest('td.slot-empty, td.slot-booked');
+    if (!td) return;
+    const key = `${td.dataset.day}-${td.dataset.slot}`;
+    if (key === lastDragKey) return;
+    const movedToNew = dragOrigin &&
+      (+td.dataset.day !== dragOrigin.day || +td.dataset.slot !== dragOrigin.slot);
+    if (movedToNew && !dragMoved) {
+      dragMoved = true;
+      const originTd = document.querySelector(
+        `td[data-day="${dragOrigin.day}"][data-slot="${dragOrigin.slot}"]`);
+      if (originTd) applyDragCell(originTd);
+    }
+    if (dragMoved) { lastDragKey = key; applyDragCell(td); }
+  }, {passive:true});
+
+  document.addEventListener('touchend', () => {
+    if (!isDragging) return;
+    isDragging = false;
+    renderBody(); renderSummary(); saveToStorage();
+    dragOrigin=null; dragMoved=false; dragMode=null; dragLabel=null; lastDragKey=null;
+  });
+})();
+
+// Apply a drag action to a single cell — lightweight visual update, no full re-render
+function applyDragCell(td) {
+  const dk   = dateKey(weekDates()[+td.dataset.day]);
+  const slot = +td.dataset.slot;
+  const span = +td.dataset.span || 1;
+  const lbl  = dragLabel || activeDragLabel;
+
+  // Book this cell (and all slots it covers) with the drag label
+  for (let s = slot; s < slot + span; s++) setSlot(dk, s, lbl, '');
+
+  // Visual preview — paint it immediately without waiting for full re-render
+  const col = labelColor(lbl);
+  td.style.background = col;
+  td.classList.remove('slot-empty');
+  td.classList.add('slot-booked');
+  td.innerHTML = `<div class="slot-inner"><span class="slot-name">${labelName(lbl)}</span></div>`;
+}
+
+// ─── Popover ───────────────────────────────────────────────
+function openPopover(dayIdx, slotStart, mouseEvent, tdEl) {
+  const dk     = dateKey(weekDates()[dayIdx]);
+  const groups = computeGroups(dk);
+  const grp    = groups.find(g => g.booked && g.start <= slotStart && slotStart < g.end) || null;
+  const gStart = grp ? grp.start : slotStart;
+  const gEnd   = grp ? grp.end   : slotStart+1;
+
+  popTarget = { dk, day:dayIdx, start:gStart, end:gEnd };
+
+  const sd    = getSlotData(dk, gStart);
+  const curLbl= sd ? sd.label : activeDragLabel;
+  const curDsc= sd ? sd.description : '';
+
+  const rangeStr = gEnd-gStart > 1
+    ? `${slotTime(gStart)}–${slotTime(gEnd)}`
+    : slotTime(gStart);
+  document.getElementById('pop-title').textContent = `${DAYS[dayIdx]} · ${rangeStr}`;
+
+  // build label chips
+  const row = document.getElementById('pop-label-row');
+  row.innerHTML =
+    `<div class="pop-lchip none-chip${!curLbl?' selected':''}" data-lid="">None</div>`
+    + LABELS.map(l =>
+        `<div class="pop-lchip${curLbl===l.id?' selected':''}"
+              style="background:${l.color}" data-lid="${l.id}">${l.name}</div>`
+      ).join('');
+  row.querySelectorAll('.pop-lchip').forEach(c => c.addEventListener('click', () => {
+    row.querySelectorAll('.pop-lchip').forEach(x=>x.classList.remove('selected'));
+    c.classList.add('selected');
+  }));
+
+  document.getElementById('pop-description').value = curDsc;
+
+  // position
+  const pop = document.getElementById('slot-popover');
+  pop.style.display = 'block';
+  const pw=pop.offsetWidth||278, ph=pop.offsetHeight||240;
+  const vw=window.innerWidth,    vh=window.innerHeight;
+  let x=mouseEvent.clientX+14, y=mouseEvent.clientY-24;
+  if (x+pw>vw-8) x=mouseEvent.clientX-pw-14;
+  if (y+ph>vh-8) y=vh-ph-8;
+  if (y<8) y=8;
+  pop.style.left=x+'px'; pop.style.top=y+'px';
+
+  document.getElementById('overlay').classList.add('visible');
+  pop.classList.add('visible');
+  setTimeout(()=>document.getElementById('pop-description').focus(), 40);
+}
+
+function closePopover() {
+  const pop = document.getElementById('slot-popover');
+  pop.classList.remove('visible');
+  pop.style.display = '';          // clear inline style set during positioning
+  document.getElementById('overlay').classList.remove('visible');
+  popTarget = null;
+}
+
+// ── Popover buttons — set up ONCE ──
+document.getElementById('pop-close').addEventListener('click', closePopover);
+document.getElementById('overlay').addEventListener('click',   closePopover);
+document.addEventListener('keydown', e => { if (e.key==='Escape') closePopover(); });
+
+document.getElementById('pop-save').addEventListener('click', () => {
+  if (!popTarget) return;
+  const chip  = document.querySelector('#pop-label-row .pop-lchip.selected');
+  const label = chip ? (chip.dataset.lid||null) : null;
+  const desc  = document.getElementById('pop-description').value.trim();
+  for (let s=popTarget.start; s<popTarget.end; s++) {
+    if (isBooked(popTarget.dk, s))
+      setSlot(popTarget.dk, s, label, s===popTarget.start ? desc : '');
+    else
+      setSlot(popTarget.dk, s, label, s===popTarget.start ? desc : '');
+  }
+  renderBody(); renderSummary(); saveToStorage();
+  closePopover();
+});
+
+document.getElementById('pop-remove').addEventListener('click', () => {
+  if (!popTarget) return;
+  for (let s=popTarget.start; s<popTarget.end; s++) clearSlot(popTarget.dk, s);
+  renderBody(); renderSummary(); saveToStorage();
+  closePopover();
+});
+
+// ─── Week navigation ───────────────────────────────────────
+function updateWeekLabel() {
+  const end = addDays(currentWeekStart, 6);
+  const fmt = d => d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  document.getElementById('week-label').textContent=`${fmt(currentWeekStart)} – ${fmt(end)}, ${end.getFullYear()}`;
+}
+
+document.getElementById('prev-week').addEventListener('click', ()=>{ currentWeekStart=addDays(currentWeekStart,-7); updateWeekLabel(); render(); });
+document.getElementById('next-week').addEventListener('click', ()=>{ currentWeekStart=addDays(currentWeekStart, 7); updateWeekLabel(); render(); });
+document.getElementById('today-btn').addEventListener('click', ()=>{ currentWeekStart=getWeekStart(new Date()); updateWeekLabel(); render(); });
+
+document.getElementById('clear-btn').addEventListener('click', ()=>{
+  if (!confirm('Clear all booked slots for this week?')) return;
+  weekDates().forEach(d=>{ data[dateKey(d)]={}; });
+  render();
+});
+
+document.getElementById('copy-btn').addEventListener('click', ()=>{
+  navigator.clipboard.writeText(document.getElementById('summary-text').value).then(()=>{
+    const b=document.getElementById('copy-btn');
+    b.textContent='Copied!';
+    setTimeout(()=>b.textContent='Copy Summary',1800);
+  });
+});
+
+// ─── Persistence ───────────────────────────────────────────
+function saveToStorage() {
+  const out={};
+  for (const [dk,dd] of Object.entries(data)) if (Object.keys(dd).length) out[dk]=dd;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(out));
+}
+
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    for (const [dk,val] of Object.entries(parsed)) {
+      // migrate old v1 format (array of indices)
+      if (Array.isArray(val)) {
+        data[dk]={};
+        val.forEach(s=>{ data[dk][s]={label:null,description:''}; });
+      } else {
+        data[dk]=val;
+      }
+    }
+  } catch(e){}
+}
+
+// ─── Init ──────────────────────────────────────────────────
+loadFromStorage();
+updateWeekLabel();
+render();
+</script>
+</body>
+</html>
